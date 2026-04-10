@@ -1,0 +1,31 @@
+{
+  "name": "uxray",
+  "version": "0.1.0",
+  "description": "CLI to audit a live web app UI for layout, accessibility, and UX issues",
+  "main": "ui-review.js",
+  "type": "commonjs",
+  "bin": {
+    "uxray": "./ui-review.js"
+  },
+  "scripts": {
+    "review": "node ui-review.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Agent-Hellboy/UXRay.git"
+  },
+  "keywords": [
+    "ui",
+    "ux",
+    "playwright",
+    "axe",
+    "accessibility",
+    "audit"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@axe-core/playwright": "^4.11.1",
+    "playwright": "^1.59.1"
+  }
+}
