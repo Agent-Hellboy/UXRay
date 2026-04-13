@@ -1,6 +1,6 @@
 {
   "name": "uxray",
-  "version": "0.2.0",
+  "version": "0.1.0",
   "description": "CLI to audit a live web app UI for layout, accessibility, and UX issues",
   "main": "ui-review.js",
   "type": "commonjs",

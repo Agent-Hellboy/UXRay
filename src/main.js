@@ -5,8 +5,54 @@ const { chromium, devices } = require('playwright');
 const { parseArgs, usage } = require('./cli');
 const { TARGET_POLICIES, WAIT_UNTIL_OPTIONS } = require('./config');
 const { nowTag, ensureDir } = require('./utils');
-const { runAuditPipeline } = require('./audit-runner');
+const { runAuditPipeline } = require('./core/audit-runner');
 const { aggregateCounts, evaluateBudgets, generateHtml } = require('./report');
+
+async function createContext(browser, { emulateMobile, width, height }) {
+  return emulateMobile
+    ? browser.newContext({ ...devices['iPhone 12'], viewport: devices['iPhone 12'].viewport })
+    : browser.newContext({ viewport: { width, height } });
+}
+
+function attachPageListeners(page, networkIssues, consoleIssues) {
+  page.on('requestfailed', (req) => {
+    networkIssues.failedRequests.push({
+      url: req.url(),
+      method: req.method(),
+      error: req.failure()?.errorText,
+      resourceType: req.resourceType(),
+    });
+  });
+
+  page.on('response', (res) => {
+    const status = res.status();
+    if (status >= 400) {
+      networkIssues.httpErrors.push({
+        url: res.url(),
+        status,
+        statusText: res.statusText(),
+        method: res.request().method(),
+        resourceType: res.request().resourceType(),
+      });
+    }
+  });
+
+  page.on('console', (msg) => {
+    if (['error', 'warning'].includes(msg.type())) {
+      consoleIssues.push({ type: msg.type(), text: msg.text() });
+    }
+  });
+
+  page.on('pageerror', (err) => {
+    consoleIssues.push({ type: 'pageerror', text: err.message });
+  });
+}
+
+async function stopTracing(context, traceLabel, screenshotsDir) {
+  const tracePath = path.join(screenshotsDir, `${traceLabel}-trace.zip`);
+  await context.tracing.stop({ path: tracePath });
+  return tracePath;
+}
 
 async function auditViewport(url, opts) {
   const {
@@ -49,9 +95,7 @@ async function auditViewport(url, opts) {
 
   try {
     browser = await chromium.launch({ headless: true });
-    context = emulateMobile
-      ? await browser.newContext({ ...devices['iPhone 12'], viewport: devices['iPhone 12'].viewport })
-      : await browser.newContext({ viewport: { width, height } });
+    context = await createContext(browser, { emulateMobile, width, height });
 
     if (trace) {
       await context.tracing.start({ screenshots: true, snapshots: true });
@@ -59,37 +103,7 @@ async function auditViewport(url, opts) {
     }
 
     const page = await context.newPage();
-    page.on('requestfailed', (req) => {
-      networkIssues.failedRequests.push({
-        url: req.url(),
-        method: req.method(),
-        error: req.failure()?.errorText,
-        resourceType: req.resourceType(),
-      });
-    });
-
-    page.on('response', (res) => {
-      const status = res.status();
-      if (status >= 400) {
-        networkIssues.httpErrors.push({
-          url: res.url(),
-          status,
-          statusText: res.statusText(),
-          method: res.request().method(),
-          resourceType: res.request().resourceType(),
-        });
-      }
-    });
-
-    page.on('console', (msg) => {
-      if (['error', 'warning'].includes(msg.type())) {
-        consoleIssues.push({ type: msg.type(), text: msg.text() });
-      }
-    });
-
-    page.on('pageerror', (err) => {
-      consoleIssues.push({ type: 'pageerror', text: err.message });
-    });
+    attachPageListeners(page, networkIssues, consoleIssues);
 
     navStart = Date.now();
     await page.goto(url, { waitUntil: WAIT_UNTIL_OPTIONS.has(waitUntil) ? waitUntil : 'load', timeout: 45000 });
@@ -133,8 +147,7 @@ async function auditViewport(url, opts) {
 
     if (context && trace && tracingStarted) {
       try {
-        tracePath = path.join(screenshotsDir, `${traceLabel}-trace.zip`);
-        await context.tracing.stop({ path: tracePath });
+        tracePath = await stopTracing(context, traceLabel, screenshotsDir);
       } catch (_) {
         tracePath = null;
       } finally {
@@ -164,8 +177,7 @@ async function auditViewport(url, opts) {
   } finally {
     if (context && trace && tracingStarted) {
       try {
-        tracePath = path.join(screenshotsDir, `${traceLabel}-trace.zip`);
-        await context.tracing.stop({ path: tracePath });
+        await stopTracing(context, traceLabel, screenshotsDir);
       } catch (_) {
         // ignore trace stop failures
       }

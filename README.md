@@ -1,17 +1,10 @@
 # UXRay
 
-Audit any hosted web app for quick UI/UX health:
-
-- Layout issues: horizontal overflow offenders, scroll snapshots.
-- Touch ergonomics: configurable policies (24px/44px/48px) with spacing-aware detection.
-- Accessibility: runs axe-core via Playwright.
-- Theme diagnostics: top colors/fonts plus low-contrast samples.
-- Stability: logs console errors/warnings, failed network requests, and HTTP 4xx/5xx responses.
-- Evidence: full-page + stepped viewport screenshots, issue crops, optional trace zips, optional HTML report.
+Fast UI/UX audit CLI for live web apps. Produces a JSON report plus evidence screenshots, and can emit an HTML summary.
 
 ## Prereqs
-- Node.js 20+ (aligned with current Playwright requirements).
-- One-time: download bundled browsers
+- Node.js 20+
+- One-time browser install:
 
 ```bash
 npx playwright install
@@ -23,7 +16,7 @@ npx playwright install
 npm install
 ```
 
-Or run directly after cloning with `npx` (no global install):
+Or run without installing (after cloning):
 
 ```bash
 npx uxray --url https://example.com
@@ -52,67 +45,27 @@ npm run review -- --url https://your-app.com \
   --shots ./reports/shots
 ```
 
-Short flags:
-- `--url` (required) target page.
-- `--mobile` also run an iPhone 12 emulation pass.
-- `--viewport` desktop viewport, e.g. `1440x900` (default 1280x720).
-- `--steps` number of viewport screenshots while scrolling (default 4).
-- `--wait` extra ms to settle after load (default 1500ms).
-- `--wait-until` Playwright navigation readiness (`load` default, `domcontentloaded`, `networkidle`, `commit`).
-- `--ready-selector` wait for a CSS selector after navigation (useful for SPAs).
-- `--out` output report path (JSON).
-- `--html` also emit a shareable HTML report (optional path argument).
-- `--shots` screenshots root folder.
-- `--target-policy` tap target preset: `wcag22-aa` (24px + spacing), `wcag21-aaa` (44px), `lighthouse` (48px recommendation).
-- `--axe-tags` comma-separated axe rule tags (e.g., `wcag21aa,wcag2aa`).
-- `--trace` also capture a Playwright trace zip per run for deep debugging.
-- Budgets / CI gates (exit non-zero on fail):
-  - `--max-a11y <n>`
-  - `--max-small-targets <n>`
-  - `--max-overflow <n>`
-  - `--max-console <n>`
-  - `--max-http-errors <n>`
+## CLI flags (high-value)
+- `--url` target page (required)
+- `--mobile` add iPhone 12 pass
+- `--viewport 1440x900`
+- `--steps` viewport screenshots while scrolling
+- `--wait` extra settle time (ms)
+- `--wait-until` load|domcontentloaded|networkidle|commit
+- `--ready-selector` wait for selector after navigation
+- `--target-policy` wcag22-aa | wcag21-aaa | lighthouse
+- `--axe-tags` comma tags for axe rules
+- `--html` emit HTML report (optional path)
+- `--trace` capture Playwright trace
+- Budget gates: `--max-a11y`, `--max-small-targets`, `--max-overflow`, `--max-console`, `--max-http-errors`
 
-After a run you’ll see:
-- `reports/ui-report-<timestamp>.json` with counts and offenders.
-- `reports/shots-<timestamp>/desktop|mobile` PNGs.
-- If `--trace` is used: `reports/shots-<timestamp>/desktop|mobile-trace.zip` for replay in Playwright Trace Viewer.
-- If `--html` is used: `reports/ui-report-<timestamp>.html` with a quick summary and evidence links.
-- Crops for top overflow/tap issues live under `reports/shots-<timestamp>/desktop|mobile/crops/`.
+## Outputs
+- JSON report: `reports/ui-report-<timestamp>.json`
+- Screenshots: `reports/shots-<timestamp>/desktop|mobile`
+- Optional HTML: `reports/ui-report-<timestamp>.html`
+- Optional trace: `reports/shots-<timestamp>/desktop|mobile-trace.zip`
+- Crops: `reports/shots-<timestamp>/desktop|mobile/crops/`
 
 ## CI & release
-- GitHub Actions workflow (`.github/workflows/ci.yml`) runs a Playwright-backed smoke against `https://example.com` and publishes smoke artifacts (uses OS temp dir for outputs).
-- To publish on tag `v*.*.*`, add repo secret `NPM_TOKEN` with publish rights; tagging triggers `npm publish --provenance`.
-
-Tap target policy notes:
-- `wcag22-aa`: flags targets smaller than 24×24px unless they have generous spacing from neighbors (approximate spacing check).
-- `wcag21-aaa`: classic 44×44px minimum.
-- `lighthouse`: 48×48px guidance.
-
-## JSON report shape (excerpt)
-
-```json
-{
-  "url": "https://example.com",
-  "runAt": "2026-04-10T18:00:00.000Z",
-  "desktop": {
-    "viewport": "1280x720",
-    "navTimeMs": 2310,
-    "perf": { "domContentLoaded": 980, "load": 1500, "renderBlocking": 210 },
-    "overflow": { "hasOverflowX": false, "offenders": [] },
-    "tapTargets": { "smallTargetCount": 2, "samples": [...] },
-    "viewportMeta": true,
-    "styles": { "topColors": [...], "topFonts": [...] },
-    "axe": { "summary": { "violations": 3, "passes": 150, "incomplete": 0 }, "topViolations": [...] },
-    "screenshots": ["reports/shots.../desktop-full.png", "..."],
-    "networkIssues": [],
-    "consoleIssues": []
-  },
-  "mobile": { ... }
-}
-```
-
-## Notes
-- Tool runs headless; remove `headless: true` in `ui-review.js` if you want to watch it.
-- If Playwright can’t launch browsers on macOS due to permissions, try running outside sandboxed shells or re-run `npx playwright install`.
-- Reports and screenshots are git-ignored.
+- GitHub Actions runs `npm run smoke` on PRs and publishes artifacts.
+- Tag `v*.*.*` to publish to npm (requires `NPM_TOKEN`).

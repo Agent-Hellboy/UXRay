@@ -1,29 +1,11 @@
 const path = require('path');
-const {
-  detectOverflow,
-  detectTapTargets,
-  sampleStyles,
-  captureScrollShots,
-  captureCrops,
-  collectDomSignals,
-  checkFocusVisibility,
-  collectPerfSignals,
-  checkReflow,
-  runAxe,
-} = require('./audits');
+const { detectOverflow, detectTapTargets, checkReflow } = require('../audits/layout');
+const { sampleStyles } = require('../audits/style');
+const { captureScrollShots, captureCrops } = require('../evidence');
+const { collectDomSignals, checkFocusVisibility } = require('../audits/dom');
+const { collectNavigationPerf, collectPerfSignals } = require('../perf');
+const { runAxe } = require('../audits/a11y');
 const { buildEvaluation } = require('./evaluation');
-
-async function collectNavigationPerf(page) {
-  return page.evaluate(() => {
-    const nav = performance.getEntriesByType('navigation')[0];
-    if (!nav) return null;
-    return {
-      domContentLoaded: nav.domContentLoadedEventEnd,
-      load: nav.loadEventEnd,
-      renderBlocking: nav.responseEnd,
-    };
-  });
-}
 
 async function collectMetrics(page, opts) {
   const perf = await collectNavigationPerf(page);

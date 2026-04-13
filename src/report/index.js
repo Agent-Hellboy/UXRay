@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-const { ensureDir } = require('./utils');
+const { ensureDir } = require('../utils');
 
 function escapeHtml(value) {
   return String(value ?? '')
