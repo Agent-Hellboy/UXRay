@@ -5,19 +5,7 @@ const { chromium, devices } = require('playwright');
 const { parseArgs, usage } = require('./cli');
 const { TARGET_POLICIES, WAIT_UNTIL_OPTIONS } = require('./config');
 const { nowTag, ensureDir } = require('./utils');
-const {
-  detectOverflow,
-  detectTapTargets,
-  sampleStyles,
-  captureScrollShots,
-  captureCrops,
-  collectDomSignals,
-  checkFocusVisibility,
-  collectPerfSignals,
-  checkReflow,
-  runAxe,
-} = require('./audits');
-const { buildEvaluation } = require('./evaluation');
+const { runAuditPipeline } = require('./audit-runner');
 const { aggregateCounts, evaluateBudgets, generateHtml } = require('./report');
 
 async function auditViewport(url, opts) {
@@ -116,29 +104,18 @@ async function auditViewport(url, opts) {
     await page.evaluate(() => window.scrollTo(0, 0));
     await page.waitForTimeout(100);
 
-    perf = await page.evaluate(() => {
-      const nav = performance.getEntriesByType('navigation')[0];
-      if (!nav) return null;
-      return {
-        domContentLoaded: nav.domContentLoadedEventEnd,
-        load: nav.loadEventEnd,
-        renderBlocking: nav.responseEnd,
-      };
+    const audit = await runAuditPipeline(page, {
+      targetPolicy,
+      axeTags,
+      steps,
+      screenshotsDir,
+      emulateMobile,
+      consoleIssues,
+      networkIssues,
     });
 
-    overflow = await detectOverflow(page);
-    tapTargets = await detectTapTargets(page, targetPolicy);
-    styles = await sampleStyles(page);
-    axe = await runAxe(page, { axeTags });
-    domSignals = await collectDomSignals(page);
-    perfSignals = await collectPerfSignals(page);
-    viewportMeta = await page.evaluate(() => Boolean(document.querySelector('meta[name="viewport"]')));
-    overflowCrops = await captureCrops(page, overflow.offenders, path.join(screenshotsDir, 'crops'), 'overflow');
-    tapCrops = await captureCrops(page, tapTargets.samples, path.join(screenshotsDir, 'crops'), 'tap');
-    shots = await captureScrollShots(page, screenshotsDir, emulateMobile ? 'mobile' : 'desktop', steps);
-    focusSignals = await checkFocusVisibility(page);
-    reflow = emulateMobile ? null : await checkReflow(page);
-    evaluation = buildEvaluation({
+    ({
+      perf,
       overflow,
       tapTargets,
       styles,
@@ -146,12 +123,13 @@ async function auditViewport(url, opts) {
       domSignals,
       perfSignals,
       viewportMeta,
-      reflow,
-      consoleIssues,
-      networkIssues,
+      overflowCrops,
+      tapCrops,
+      shots,
       focusSignals,
-      perf,
-    });
+      reflow,
+      evaluation,
+    } = audit);
 
     if (context && trace && tracingStarted) {
       try {
