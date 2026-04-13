@@ -223,6 +223,7 @@ async function captureScrollShots(page, dir, prefix, steps) {
 async function captureCrops(page, items, dir, prefix, limit = 8) {
   if (!items || !items.length) return [];
   ensureDir(dir);
+  const viewport = page.viewportSize && page.viewportSize();
   const docSize = await page.evaluate(() => ({
     width: document.documentElement.scrollWidth,
     height: document.documentElement.scrollHeight,
@@ -233,6 +234,10 @@ async function captureCrops(page, items, dir, prefix, limit = 8) {
   for (let i = 0; i < targets.length; i += 1) {
     const rect = targets[i].rect;
     if (!rect || !rect.width || !rect.height) continue;
+    if (viewport) {
+      const outOfView = rect.x > viewport.width || rect.y > viewport.height || rect.x + rect.width < 0 || rect.y + rect.height < 0;
+      if (outOfView) continue;
+    }
     const clip = {
       x: Math.max(0, rect.x - 4),
       y: Math.max(0, rect.y - 4),

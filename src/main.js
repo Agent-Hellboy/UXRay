@@ -90,6 +90,8 @@ async function auditViewport(url, opts) {
     }
   }
   await page.waitForTimeout(wait);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.waitForTimeout(100);
 
   const perf = await page.evaluate(() => {
     const nav = performance.getEntriesByType('navigation')[0];
@@ -108,11 +110,9 @@ async function auditViewport(url, opts) {
   const domSignals = await collectDomSignals(page);
   const perfSignals = await collectPerfSignals(page);
   const viewportMeta = await page.evaluate(() => Boolean(document.querySelector('meta[name="viewport"]')));
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.waitForTimeout(100);
-  const shots = await captureScrollShots(page, screenshotsDir, emulateMobile ? 'mobile' : 'desktop', steps);
   const overflowCrops = await captureCrops(page, overflow.offenders, path.join(screenshotsDir, 'crops'), 'overflow');
   const tapCrops = await captureCrops(page, tapTargets.samples, path.join(screenshotsDir, 'crops'), 'tap');
+  const shots = await captureScrollShots(page, screenshotsDir, emulateMobile ? 'mobile' : 'desktop', steps);
   const focusSignals = await checkFocusVisibility(page);
   const reflow = emulateMobile ? null : await checkReflow(page);
   const evaluation = buildEvaluation({
