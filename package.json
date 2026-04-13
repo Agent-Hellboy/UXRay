@@ -8,7 +8,9 @@
     "uxray": "./ui-review.js"
   },
   "scripts": {
-    "review": "node ui-review.js"
+    "review": "node ui-review.js",
+    "smoke": "node scripts/smoke.js",
+    "ci": "npm run smoke"
   },
   "repository": {
     "type": "git",

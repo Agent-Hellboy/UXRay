@@ -1,17 +1,10 @@
 # UXRay
 
-Audit any hosted web app for quick UI/UX health:
-
-- Layout issues: horizontal overflow offenders, scroll snapshots.
-- Touch ergonomics: finds tap targets smaller than 44px.
-- Accessibility: runs axe-core via Playwright.
-- Theme signals: samples top colors and fonts.
-- Stability: logs console errors/warnings and failed network requests.
-- Evidence: full-page + stepped viewport screenshots.
+Fast UI/UX audit CLI for live web apps. Produces a JSON report plus evidence screenshots, and can emit an HTML summary.
 
 ## Prereqs
-- Node.js 18+ (Playwright uses modern APIs).
-- One-time: download bundled browsers
+- Node.js 20+
+- One-time browser install:
 
 ```bash
 npx playwright install
@@ -23,10 +16,10 @@ npx playwright install
 npm install
 ```
 
-Or run directly after cloning with `npx` (no global install):
+Or run without installing (after cloning):
 
 ```bash
-npx ./ui-review.js --url https://example.com
+npx uxray --url https://example.com
 ```
 
 ## Usage
@@ -37,47 +30,42 @@ npm run review -- --url https://your-app.com \
   --viewport 1366x768 \
   --steps 4 \
   --wait 2000 \
+  --wait-until load \
+  --ready-selector '#app' \
+  --target-policy wcag22-aa \
+  --axe-tags wcag21aa,wcag2aa \
+  --html \
+  --max-a11y 5 \
+  --max-small-targets 10 \
+  --max-overflow 2 \
+  --max-console 3 \
+  --max-http-errors 0 \
+  --trace \
   --out ./reports/uxray-report.json \
   --shots ./reports/shots
 ```
 
-Short flags:
-- `--url` (required) target page.
-- `--mobile` also run an iPhone 12 emulation pass.
-- `--viewport` desktop viewport, e.g. `1440x900` (default 1280x720).
-- `--steps` number of viewport screenshots while scrolling (default 4).
-- `--wait` extra ms to settle after load (default 1500ms).
-- `--out` output report path (JSON).
-- `--shots` screenshots root folder.
+## CLI flags (high-value)
+- `--url` target page (required)
+- `--mobile` add iPhone 12 pass
+- `--viewport 1440x900`
+- `--steps` viewport screenshots while scrolling
+- `--wait` extra settle time (ms)
+- `--wait-until` load|domcontentloaded|networkidle|commit
+- `--ready-selector` wait for selector after navigation
+- `--target-policy` wcag22-aa | wcag21-aaa | lighthouse
+- `--axe-tags` comma tags for axe rules
+- `--html` emit HTML report (optional path)
+- `--trace` capture Playwright trace
+- Budget gates: `--max-a11y`, `--max-small-targets`, `--max-overflow`, `--max-console`, `--max-http-errors`
 
-After a run you’ll see:
-- `reports/ui-report-<timestamp>.json` with counts and offenders.
-- `reports/shots-<timestamp>/desktop|mobile` PNGs.
+## Outputs
+- JSON report: `reports/ui-report-<timestamp>.json`
+- Screenshots: `reports/shots-<timestamp>/desktop|mobile`
+- Optional HTML: `reports/ui-report-<timestamp>.html`
+- Optional trace: `reports/shots-<timestamp>/desktop|mobile-trace.zip`
+- Crops: `reports/shots-<timestamp>/desktop|mobile/crops/`
 
-## JSON report shape (excerpt)
-
-```json
-{
-  "url": "https://example.com",
-  "runAt": "2026-04-10T18:00:00.000Z",
-  "desktop": {
-    "viewport": "1280x720",
-    "navTimeMs": 2310,
-    "perf": { "domContentLoaded": 980, "load": 1500, "renderBlocking": 210 },
-    "overflow": { "hasOverflowX": false, "offenders": [] },
-    "tapTargets": { "smallTargetCount": 2, "samples": [...] },
-    "viewportMeta": true,
-    "styles": { "topColors": [...], "topFonts": [...] },
-    "axe": { "summary": { "violations": 3, "passes": 150, "incomplete": 0 }, "topViolations": [...] },
-    "screenshots": ["reports/shots.../desktop-full.png", "..."],
-    "networkIssues": [],
-    "consoleIssues": []
-  },
-  "mobile": { ... }
-}
-```
-
-## Notes
-- Tool runs headless; remove `headless: true` in `ui-review.js` if you want to watch it.
-- If Playwright can’t launch browsers on macOS due to permissions, try running outside sandboxed shells or re-run `npx playwright install`.
-- Reports and screenshots are git-ignored.
+## CI & release
+- GitHub Actions runs `npm run smoke` on PRs and publishes artifacts.
+- Tag `v*.*.*` to publish to npm (requires `NPM_TOKEN`).
