@@ -1,6 +1,6 @@
 {
   "name": "uxray",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "CLI to audit a live web app UI for layout, accessibility, and UX issues",
   "main": "ui-review.js",
   "type": "commonjs",
@@ -8,7 +8,9 @@
     "uxray": "./ui-review.js"
   },
   "scripts": {
-    "review": "node ui-review.js"
+    "review": "node ui-review.js",
+    "smoke": "node ui-review.js --url https://example.com --steps 1 --wait 800 --wait-until load --target-policy wcag21-aaa --out /tmp/uxray-ci.json --shots /tmp/uxray-shots",
+    "ci": "npm run smoke"
   },
   "repository": {
     "type": "git",

@@ -1,0 +1,52 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+    tags:
+      - 'v*.*.*'
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright browsers (chromium only)
+        run: npx playwright install chromium --with-deps
+      - name: Smoke run against example.com
+        run: npm run smoke
+      - name: Upload smoke artifacts (report + shots)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: smoke-artifacts
+          path: |
+            /tmp/uxray-ci.json
+            /tmp/uxray-shots
+
+  publish:
+    needs: test
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+      - name: Install dependencies
+        run: npm ci
+      - name: Install Playwright browsers (chromium only)
+        run: npx playwright install chromium --with-deps
+      - name: Publish to npm
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --provenance
