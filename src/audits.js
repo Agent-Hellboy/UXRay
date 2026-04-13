@@ -306,6 +306,11 @@ async function collectDomSignals(page) {
 
     const imgs = Array.from(document.querySelectorAll('img')).slice(0, 200);
     imgs.forEach((img) => {
+      const inView = visible(img);
+      const loading = (img.getAttribute('loading') || '').toLowerCase();
+      const isLazy = loading === 'lazy' || img.loading === 'lazy';
+      const hasLazyData = Boolean(img.getAttribute('data-src') || img.getAttribute('data-srcset') || img.getAttribute('data-lazy'));
+      if (!inView && (isLazy || hasLazyData)) return;
       if (img.complete && img.naturalWidth === 0) {
         if (missingImages.length < 20) missingImages.push({ selector: format(img), src: img.currentSrc || img.src });
       }
@@ -325,7 +330,24 @@ async function collectDomSignals(page) {
     links.forEach((a) => {
       const href = (a.getAttribute('href') || '').trim();
       const hasDeadHref = !href || href === '#' || href.toLowerCase().startsWith('javascript:');
-      if (hasDeadHref && deadLinks.length < 20) deadLinks.push({ selector: format(a), href });
+      const role = (a.getAttribute('role') || '').toLowerCase();
+      const hasRoleAction = ['button', 'tab', 'menuitem', 'switch', 'option'].includes(role);
+      const hasHandlers = Boolean(
+        a.getAttribute('onclick')
+        || a.getAttribute('onmousedown')
+        || a.getAttribute('onmouseup')
+        || a.getAttribute('onkeydown')
+        || a.getAttribute('onkeyup')
+        || a.getAttribute('onkeypress'),
+      );
+      const hasAriaAction = Boolean(
+        a.getAttribute('aria-controls')
+        || a.getAttribute('aria-expanded')
+        || a.getAttribute('aria-haspopup'),
+      );
+      const hasDataAction = a.dataset && Object.keys(a.dataset).length > 0;
+      const likelyJsAction = hasRoleAction || hasHandlers || hasAriaAction || hasDataAction;
+      if (hasDeadHref && !likelyJsAction && deadLinks.length < 20) deadLinks.push({ selector: format(a), href });
       if (a.target === '_blank') {
         const rel = (a.getAttribute('rel') || '').toLowerCase();
         if (!rel.includes('noopener') && externalBlankNoRel.length < 20) {
