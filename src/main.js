@@ -35,130 +35,178 @@ async function auditViewport(url, opts) {
     trace,
   } = opts;
 
-  const browser = await chromium.launch({ headless: true });
-  const context = emulateMobile
-    ? await browser.newContext({ ...devices['iPhone 12'], viewport: devices['iPhone 12'].viewport })
-    : await browser.newContext({ viewport: { width, height } });
+  let browser = null;
+  let context = null;
+  let tracePath = null;
+  const traceLabel = emulateMobile ? 'mobile' : 'desktop';
+  let tracingStarted = false;
+  let navStart = null;
+  let perf = null;
+  let overflow = null;
+  let overflowCrops = [];
+  let tapTargets = null;
+  let tapCrops = [];
+  let styles = null;
+  let domSignals = null;
+  let focusSignals = null;
+  let perfSignals = null;
+  let viewportMeta = false;
+  let shots = [];
+  let reflow = null;
+  let axe = null;
+  let evaluation = null;
 
-  if (trace) {
-    await context.tracing.start({ screenshots: true, snapshots: true });
-  }
-
-  const page = await context.newPage();
   const networkIssues = { failedRequests: [], httpErrors: [] };
   const consoleIssues = [];
 
-  page.on('requestfailed', (req) => {
-    networkIssues.failedRequests.push({
-      url: req.url(),
-      method: req.method(),
-      error: req.failure()?.errorText,
-      resourceType: req.resourceType(),
-    });
-  });
+  try {
+    browser = await chromium.launch({ headless: true });
+    context = emulateMobile
+      ? await browser.newContext({ ...devices['iPhone 12'], viewport: devices['iPhone 12'].viewport })
+      : await browser.newContext({ viewport: { width, height } });
 
-  page.on('response', (res) => {
-    const status = res.status();
-    if (status >= 400) {
-      networkIssues.httpErrors.push({
-        url: res.url(),
-        status,
-        statusText: res.statusText(),
-        method: res.request().method(),
-        resourceType: res.request().resourceType(),
+    if (trace) {
+      await context.tracing.start({ screenshots: true, snapshots: true });
+      tracingStarted = true;
+    }
+
+    const page = await context.newPage();
+    page.on('requestfailed', (req) => {
+      networkIssues.failedRequests.push({
+        url: req.url(),
+        method: req.method(),
+        error: req.failure()?.errorText,
+        resourceType: req.resourceType(),
       });
+    });
+
+    page.on('response', (res) => {
+      const status = res.status();
+      if (status >= 400) {
+        networkIssues.httpErrors.push({
+          url: res.url(),
+          status,
+          statusText: res.statusText(),
+          method: res.request().method(),
+          resourceType: res.request().resourceType(),
+        });
+      }
+    });
+
+    page.on('console', (msg) => {
+      if (['error', 'warning'].includes(msg.type())) {
+        consoleIssues.push({ type: msg.type(), text: msg.text() });
+      }
+    });
+
+    page.on('pageerror', (err) => {
+      consoleIssues.push({ type: 'pageerror', text: err.message });
+    });
+
+    navStart = Date.now();
+    await page.goto(url, { waitUntil: WAIT_UNTIL_OPTIONS.has(waitUntil) ? waitUntil : 'load', timeout: 45000 });
+    if (readySelector) {
+      try {
+        await page.waitForSelector(readySelector, { timeout: Math.max(wait, 5000) });
+      } catch (err) {
+        console.warn(`ready-selector '${readySelector}' not found before timeout`);
+      }
     }
-  });
+    await page.waitForTimeout(wait);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(100);
 
-  page.on('console', (msg) => {
-    if (['error', 'warning'].includes(msg.type())) {
-      consoleIssues.push({ type: msg.type(), text: msg.text() });
+    perf = await page.evaluate(() => {
+      const nav = performance.getEntriesByType('navigation')[0];
+      if (!nav) return null;
+      return {
+        domContentLoaded: nav.domContentLoadedEventEnd,
+        load: nav.loadEventEnd,
+        renderBlocking: nav.responseEnd,
+      };
+    });
+
+    overflow = await detectOverflow(page);
+    tapTargets = await detectTapTargets(page, targetPolicy);
+    styles = await sampleStyles(page);
+    axe = await runAxe(page, { axeTags });
+    domSignals = await collectDomSignals(page);
+    perfSignals = await collectPerfSignals(page);
+    viewportMeta = await page.evaluate(() => Boolean(document.querySelector('meta[name="viewport"]')));
+    overflowCrops = await captureCrops(page, overflow.offenders, path.join(screenshotsDir, 'crops'), 'overflow');
+    tapCrops = await captureCrops(page, tapTargets.samples, path.join(screenshotsDir, 'crops'), 'tap');
+    shots = await captureScrollShots(page, screenshotsDir, emulateMobile ? 'mobile' : 'desktop', steps);
+    focusSignals = await checkFocusVisibility(page);
+    reflow = emulateMobile ? null : await checkReflow(page);
+    evaluation = buildEvaluation({
+      overflow,
+      tapTargets,
+      styles,
+      axe,
+      domSignals,
+      perfSignals,
+      viewportMeta,
+      reflow,
+      consoleIssues,
+      networkIssues,
+      focusSignals,
+      perf,
+    });
+
+    if (context && trace && tracingStarted) {
+      try {
+        tracePath = path.join(screenshotsDir, `${traceLabel}-trace.zip`);
+        await context.tracing.stop({ path: tracePath });
+      } catch (_) {
+        tracePath = null;
+      } finally {
+        tracingStarted = false;
+      }
     }
-  });
 
-  page.on('pageerror', (err) => {
-    consoleIssues.push({ type: 'pageerror', text: err.message });
-  });
-
-  const navStart = Date.now();
-  await page.goto(url, { waitUntil: WAIT_UNTIL_OPTIONS.has(waitUntil) ? waitUntil : 'load', timeout: 45000 });
-  if (readySelector) {
-    try {
-      await page.waitForSelector(readySelector, { timeout: Math.max(wait, 5000) });
-    } catch (err) {
-      console.warn(`ready-selector '${readySelector}' not found before timeout`);
-    }
-  }
-  await page.waitForTimeout(wait);
-  await page.evaluate(() => window.scrollTo(0, 0));
-  await page.waitForTimeout(100);
-
-  const perf = await page.evaluate(() => {
-    const nav = performance.getEntriesByType('navigation')[0];
-    if (!nav) return null;
     return {
-      domContentLoaded: nav.domContentLoadedEventEnd,
-      load: nav.loadEventEnd,
-      renderBlocking: nav.responseEnd,
+      viewport: emulateMobile ? 'mobile iPhone 12' : `${width}x${height}`,
+      navTimeMs: Date.now() - navStart,
+      perf,
+      overflow: { ...overflow, crops: overflowCrops },
+      tapTargets: { ...tapTargets, crops: tapCrops },
+      viewportMeta,
+      styles: { ...styles },
+      domSignals,
+      focusSignals,
+      perfSignals,
+      reflow,
+      evaluation,
+      axe,
+      screenshots: shots,
+      networkIssues,
+      consoleIssues,
+      trace: tracePath ? path.relative(process.cwd(), tracePath) : null,
     };
-  });
-
-  const overflow = await detectOverflow(page);
-  const tapTargets = await detectTapTargets(page, targetPolicy);
-  const styles = await sampleStyles(page);
-  const axe = await runAxe(page, { axeTags });
-  const domSignals = await collectDomSignals(page);
-  const perfSignals = await collectPerfSignals(page);
-  const viewportMeta = await page.evaluate(() => Boolean(document.querySelector('meta[name="viewport"]')));
-  const overflowCrops = await captureCrops(page, overflow.offenders, path.join(screenshotsDir, 'crops'), 'overflow');
-  const tapCrops = await captureCrops(page, tapTargets.samples, path.join(screenshotsDir, 'crops'), 'tap');
-  const shots = await captureScrollShots(page, screenshotsDir, emulateMobile ? 'mobile' : 'desktop', steps);
-  const focusSignals = await checkFocusVisibility(page);
-  const reflow = emulateMobile ? null : await checkReflow(page);
-  const evaluation = buildEvaluation({
-    overflow,
-    tapTargets,
-    styles,
-    axe,
-    domSignals,
-    perfSignals,
-    viewportMeta,
-    reflow,
-    consoleIssues,
-    networkIssues,
-    focusSignals,
-    perf,
-  });
-
-  let tracePath = null;
-  if (trace) {
-    tracePath = path.join(screenshotsDir, `${emulateMobile ? 'mobile' : 'desktop'}-trace.zip`);
-    await context.tracing.stop({ path: tracePath });
-    tracePath = path.relative(process.cwd(), tracePath);
+  } finally {
+    if (context && trace && tracingStarted) {
+      try {
+        tracePath = path.join(screenshotsDir, `${traceLabel}-trace.zip`);
+        await context.tracing.stop({ path: tracePath });
+      } catch (_) {
+        // ignore trace stop failures
+      }
+    }
+    if (context) {
+      try {
+        await context.close();
+      } catch (_) {
+        // ignore close failures
+      }
+    }
+    if (browser) {
+      try {
+        await browser.close();
+      } catch (_) {
+        // ignore close failures
+      }
+    }
   }
-
-  await browser.close();
-
-  return {
-    viewport: emulateMobile ? 'mobile iPhone 12' : `${width}x${height}`,
-    navTimeMs: Date.now() - navStart,
-    perf,
-    overflow: { ...overflow, crops: overflowCrops },
-    tapTargets: { ...tapTargets, crops: tapCrops },
-    viewportMeta,
-    styles: { ...styles },
-    domSignals,
-    focusSignals,
-    perfSignals,
-    reflow,
-    evaluation,
-    axe,
-    screenshots: shots,
-    overflowCrops,
-    networkIssues,
-    consoleIssues,
-    trace: tracePath,
-  };
 }
 
 async function main() {

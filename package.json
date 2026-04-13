@@ -9,7 +9,7 @@
   },
   "scripts": {
     "review": "node ui-review.js",
-    "smoke": "node ui-review.js --url https://example.com --steps 1 --wait 800 --wait-until load --target-policy wcag21-aaa --out /tmp/uxray-ci.json --shots /tmp/uxray-shots",
+    "smoke": "node scripts/smoke.js",
     "ci": "npm run smoke"
   },
   "repository": {

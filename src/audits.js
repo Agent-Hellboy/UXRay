@@ -91,7 +91,6 @@ async function detectTapTargets(page, policy) {
             height: Math.round(rect.height),
           },
           size: { width: Math.round(rect.width), height: Math.round(rect.height) },
-          spacingOk: spacedEnough,
           text: (el.innerText || '').trim().slice(0, 80),
         });
       }
@@ -150,10 +149,11 @@ async function sampleStyles(page) {
       const style = getComputedStyle(el);
       const fgHex = toHex(style.color);
       const bgHex = toHex(style.backgroundColor);
+      const rawBg = parseRgb(style.backgroundColor);
       const font = style.fontFamily.split(',')[0].replace(/['"]/g, '').trim();
 
       if (fgHex) colorCounts.set(fgHex, (colorCounts.get(fgHex) || 0) + 1);
-      if (bgHex && bgHex !== '#000000' && bgHex !== '#00000000') colorCounts.set(bgHex, (colorCounts.get(bgHex) || 0) + 1);
+      if (bgHex && (!rawBg || rawBg.a !== 0)) colorCounts.set(bgHex, (colorCounts.get(bgHex) || 0) + 1);
       if (font) fontCounts.set(font, (fontCounts.get(font) || 0) + 1);
 
       if (!el.textContent || !el.textContent.trim()) return;
@@ -375,7 +375,8 @@ async function collectDomSignals(page) {
 
     const inputs = Array.from(document.querySelectorAll('input, select, textarea')).slice(0, 300);
     inputs.forEach((el) => {
-      if (el.type === 'hidden') return;
+      const inputType = (el.type || '').toLowerCase();
+      if (['hidden', 'submit', 'button', 'reset', 'image'].includes(inputType)) return;
       const hasLabel = (el.labels && el.labels.length > 0)
         || el.getAttribute('aria-label')
         || el.getAttribute('aria-labelledby');
@@ -390,7 +391,7 @@ async function collectDomSignals(page) {
 
     const forms = Array.from(document.querySelectorAll('form')).slice(0, 80);
     forms.forEach((form) => {
-      const hasSubmit = form.querySelector('button[type="submit"], input[type="submit"], [role="button"]');
+      const hasSubmit = form.querySelector('button[type="submit"], button:not([type]), input[type="submit"]');
       if (!hasSubmit && formsWithoutSubmit.length < 20) formsWithoutSubmit.push({ selector: format(form) });
     });
 
@@ -455,7 +456,15 @@ async function checkFocusVisibility(page, limit = 20) {
       return `${el.tagName.toLowerCase()}${el.id ? `#${el.id}` : ''}${cls}`;
     };
     const focusables = Array.from(document.querySelectorAll('a,button,input,select,textarea,[tabindex]:not([tabindex="-1"])'))
+      .filter((el) => el.isConnected)
       .filter((el) => !el.hasAttribute('disabled'))
+      .filter((el) => {
+        const style = getComputedStyle(el);
+        if (style.display === 'none' || style.visibility === 'hidden' || Number.parseFloat(style.opacity) === 0) return false;
+        if (el.getClientRects().length === 0) return false;
+        if (el.offsetWidth === 0 && el.offsetHeight === 0) return false;
+        return true;
+      })
       .slice(0, maxCount);
     const missing = [];
     let visibleCount = 0;

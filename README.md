@@ -81,7 +81,7 @@ After a run you’ll see:
 - Crops for top overflow/tap issues live under `reports/shots-<timestamp>/desktop|mobile/crops/`.
 
 ## CI & release
-- GitHub Actions workflow (`.github/workflows/ci.yml`) runs a Playwright-backed smoke against `https://example.com` and publishes smoke artifacts.
+- GitHub Actions workflow (`.github/workflows/ci.yml`) runs a Playwright-backed smoke against `https://example.com` and publishes smoke artifacts (uses OS temp dir for outputs).
 - To publish on tag `v*.*.*`, add repo secret `NPM_TOKEN` with publish rights; tagging triggers `npm publish --provenance`.
 
 Tap target policy notes:

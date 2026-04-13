@@ -32,11 +32,14 @@ function parseArgs(argv) {
       args.mobile = true;
     } else if (val === '--viewport' && argv[i + 1]) {
       const [w, h] = argv[i + 1].split('x');
-      args.width = Number.parseInt(w, 10) || args.width;
-      args.height = Number.parseInt(h, 10) || args.height;
+      const width = Number.parseInt(w, 10);
+      const height = Number.parseInt(h, 10);
+      if (Number.isFinite(width) && width > 0) args.width = width;
+      if (Number.isFinite(height) && height > 0) args.height = height;
       i += 1;
     } else if (val === '--wait' && argv[i + 1]) {
-      args.wait = Number.parseInt(argv[i + 1], 10) || args.wait;
+      const wait = Number.parseInt(argv[i + 1], 10);
+      if (Number.isFinite(wait) && wait >= 0) args.wait = wait;
       i += 1;
     } else if (val === '--wait-until' && argv[i + 1]) {
       args.waitUntil = argv[i + 1];
@@ -45,7 +48,8 @@ function parseArgs(argv) {
       args.readySelector = argv[i + 1];
       i += 1;
     } else if (val === '--steps' && argv[i + 1]) {
-      args.steps = Number.parseInt(argv[i + 1], 10) || args.steps;
+      const steps = Number.parseInt(argv[i + 1], 10);
+      if (Number.isFinite(steps) && steps >= 1) args.steps = steps;
       i += 1;
     } else if (val === '--out' && argv[i + 1]) {
       args.out = argv[i + 1];
@@ -69,19 +73,24 @@ function parseArgs(argv) {
     } else if (val === '--trace') {
       args.trace = true;
     } else if (val === '--max-a11y' && argv[i + 1]) {
-      args.budgetA11y = Number.parseInt(argv[i + 1], 10);
+      const value = Number.parseInt(argv[i + 1], 10);
+      if (Number.isFinite(value) && value >= 0) args.budgetA11y = value;
       i += 1;
     } else if (val === '--max-small-targets' && argv[i + 1]) {
-      args.budgetTap = Number.parseInt(argv[i + 1], 10);
+      const value = Number.parseInt(argv[i + 1], 10);
+      if (Number.isFinite(value) && value >= 0) args.budgetTap = value;
       i += 1;
     } else if (val === '--max-overflow' && argv[i + 1]) {
-      args.budgetOverflow = Number.parseInt(argv[i + 1], 10);
+      const value = Number.parseInt(argv[i + 1], 10);
+      if (Number.isFinite(value) && value >= 0) args.budgetOverflow = value;
       i += 1;
     } else if (val === '--max-console' && argv[i + 1]) {
-      args.budgetConsole = Number.parseInt(argv[i + 1], 10);
+      const value = Number.parseInt(argv[i + 1], 10);
+      if (Number.isFinite(value) && value >= 0) args.budgetConsole = value;
       i += 1;
     } else if (val === '--max-http-errors' && argv[i + 1]) {
-      args.budgetHttpErrors = Number.parseInt(argv[i + 1], 10);
+      const value = Number.parseInt(argv[i + 1], 10);
+      if (Number.isFinite(value) && value >= 0) args.budgetHttpErrors = value;
       i += 1;
     }
   }
