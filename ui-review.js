@@ -216,7 +216,7 @@ async function detectTapTargets(page, policy) {
 async function sampleStyles(page) {
   return page.evaluate(() => {
     const toHex = (rgb) => {
-      const parts = rgb.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)/i);
+      const parts = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/i);
       if (!parts) return null;
       return `#${[1, 2, 3]
         .map((i) => Number(parts[i]).toString(16).padStart(2, '0'))
@@ -224,7 +224,7 @@ async function sampleStyles(page) {
     };
 
     const parseRgb = (rgb) => {
-      const parts = rgb.match(/rgba?\\((\\d+),\\s*(\\d+),\\s*(\\d+)(?:,\\s*([\\d.]+))?/i);
+      const parts = rgb.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?/i);
       if (!parts) return null;
       return {
         r: Number(parts[1]),
@@ -339,13 +339,23 @@ async function captureCrops(page, items, dir, prefix, limit = 8) {
     const clip = {
       x: Math.max(0, rect.x - 4),
       y: Math.max(0, rect.y - 4),
-      width: Math.min(rect.width + 8, docSize.width - rect.x),
-      height: Math.min(rect.height + 8, docSize.height - rect.y),
+      width: rect.width + 8,
+      height: rect.height + 8,
     };
-    if (clip.width <= 0 || clip.height <= 0) continue;
+    const maxWidth = Math.max(0, docSize.width - clip.x);
+    const maxHeight = Math.max(0, docSize.height - clip.y);
+    clip.width = Math.min(clip.width, maxWidth);
+    clip.height = Math.min(clip.height, maxHeight);
+    if (clip.width <= 1 || clip.height <= 1) continue;
     const cropPath = path.join(dir, `${prefix}-${i + 1}.png`);
-    await page.screenshot({ path: cropPath, clip });
-    crops.push(path.relative(process.cwd(), cropPath));
+    try {
+      await page.screenshot({ path: cropPath, clip });
+      crops.push(path.relative(process.cwd(), cropPath));
+    } catch (err) {
+      // Skip invalid clip regions (outside viewport) to keep the run resilient.
+      // eslint-disable-next-line no-console
+      console.warn(`crop failed for ${prefix} index ${i}: ${err.message}`);
+    }
   }
   return crops;
 }
@@ -668,7 +678,14 @@ async function main() {
 
   const pkg = require('./package.json');
   const playwrightPkg = require('playwright/package.json');
-  const axePkg = require('@axe-core/playwright/package.json');
+  let axeVersion = null;
+  try {
+    // Some packages don't export package.json via exports; guard to keep runs resilient.
+    // eslint-disable-next-line import/no-dynamic-require, global-require
+    axeVersion = require('@axe-core/playwright/package.json').version;
+  } catch (err) {
+    axeVersion = 'unknown';
+  }
 
   const report = {
     tool: { name: pkg.name || 'uxray', version: pkg.version || '0.0.0' },
@@ -692,7 +709,7 @@ async function main() {
     },
     dependencies: {
       playwrightVersion: playwrightPkg.version,
-      axeVersion: axePkg.version,
+      axeVersion,
     },
     desktop,
     mobile,
