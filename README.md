@@ -12,6 +12,12 @@ npx playwright install
 
 ## Install
 
+Global install (recommended for frequent use):
+
+```bash
+npm i -g uxray-ui-audit
+```
+
 ```bash
 npm install
 ```
@@ -19,7 +25,7 @@ npm install
 Or run without installing (after cloning):
 
 ```bash
-npx uxray --url https://example.com
+npx uxray-ui-audit --url https://example.com
 ```
 
 ## Usage
