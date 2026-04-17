@@ -26,6 +26,9 @@
   ],
   "author": "",
   "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  },
   "dependencies": {
     "@axe-core/playwright": "^4.11.1",
     "playwright": "^1.59.1"
